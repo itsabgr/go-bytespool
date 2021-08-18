@@ -1,31 +1,52 @@
 package bytespool
 
 import (
+	"github.com/itsabgr/atomic2"
 	. "github.com/itsabgr/go-q"
 )
 
-var bytes Q
+var pool Q
 
 //MinBytesLen is minimum bytes len to add to pool
-var MinBytesLen = 16
+var MinBytesLen uint = 16
 
-//Put adds b to pull
-func Put(b []byte) {
-	if len(b) <= MinBytesLen {
+//MaxBytesLen is maximum bytes len to add to pool
+var MaxBytesLen uint = 536870912 //512MB
+//MaxPoolLen is maximum pool len
+var MaxPoolLen uint = 4294967296 //4GB
+
+//Push adds b to pull
+func Push(b []byte) {
+	if uint(len(b)) <= MinBytesLen {
 		return
 	}
-	bytes.Push(b)
+	if uint(len(b)) > MaxBytesLen {
+		return
+	}
+	if uint(poolLen.Get()+uintptr(len(b))) > MaxPoolLen {
+		return
+	}
+	poolLen.Add(uintptr(len(b)))
+	pool.Push(b)
 }
 
-//Get return bytes[:max]
-func Get(max int) []byte {
-	IByte, found := bytes.Pull()
+var poolLen = atomic2.Uintptr(0)
+
+//Len returns total pool bytes len
+func Len() uint {
+	return uint(poolLen.Get())
+}
+
+//Pull return bytes[:max]
+func Pull(max uint) []byte {
+	IByte, found := pool.Pull()
 	if !found {
 		return make([]byte, max)
 	}
 	b := IByte.([]byte)
-	if len(b) > max {
-		Put(b[max:])
+	poolLen.Sub(uintptr(len(b)))
+	if uint(len(b)) > max {
+		Push(b[max:])
 		return b[:max]
 	}
 	return b
